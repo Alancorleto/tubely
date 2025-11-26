@@ -261,9 +261,7 @@ function viewVideo(video) {
     thumbnailImg.style.display = 'none';
   } else {
     thumbnailImg.style.display = 'block';
-    originalURL = video.thumbnail_url
-    time = Date.now();
-    thumbnailImg.src = `${originalURL}?v=${time}`;
+    thumbnailImg.src = video.thumbnail_url;
   }
 
   const videoPlayer = document.getElementById('video-player');
