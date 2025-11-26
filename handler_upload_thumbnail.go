@@ -30,31 +30,6 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	fmt.Println("uploading thumbnail for video", videoID, "by user", userID)
-
-	const maxMemory = 10 << 20
-	r.ParseMultipartForm(maxMemory)
-
-	// "thumbnail" should match the HTML form input name
-	file, header, err := r.FormFile("thumbnail")
-	if err != nil {
-		respondWithError(w, http.StatusBadRequest, "Unable to parse form file", err)
-		return
-	}
-	defer file.Close()
-
-	mediaType := header.Header.Get("Content-Type")
-
-	imageData, err := io.ReadAll(file)
-	if err != nil {
-		respondWithError(w, http.StatusInternalServerError, "Unable to read file", err)
-		return
-	}
-
-	encodedImage := base64.StdEncoding.EncodeToString(imageData)
-
-	dataURL := fmt.Sprintf("data:%s;base64,%s", mediaType, encodedImage)
-
 	video, err := cfg.db.GetVideo(videoID)
 	if err != nil {
 		respondWithError(w, http.StatusNotFound, "Video not found", err)
@@ -66,16 +41,29 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	// thumb := thumbnail{
-	// 	data:      imageData,
-	// 	mediaType: mediaType,
-	// }
+	fmt.Println("uploading thumbnail for video", videoID, "by user", userID)
 
-	// videoThumbnails[videoID] = thumb
+	const maxMemory = 10 << 20
+	r.ParseMultipartForm(maxMemory)
 
-	// url := fmt.Sprintf("http://localhost:8091/api/thumbnails/%s", videoIDString)
-	// video.ThumbnailURL = &url
-	video.ThumbnailURL = &dataURL
+	file, header, err := r.FormFile("thumbnail")
+	if err != nil {
+		respondWithError(w, http.StatusBadRequest, "Unable to parse form file", err)
+		return
+	}
+	defer file.Close()
+
+	imageData, err := io.ReadAll(file)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Unable to read file", err)
+		return
+	}
+
+	mediaType := header.Header.Get("Content-Type")
+	base64EncodedImage := base64.StdEncoding.EncodeToString(imageData)
+	base64DataURL := fmt.Sprintf("data:%s;base64,%s", mediaType, base64EncodedImage)
+	video.ThumbnailURL = &base64DataURL
+
 	cfg.db.UpdateVideo(video)
 
 	respondWithJSON(w, http.StatusOK, video)
