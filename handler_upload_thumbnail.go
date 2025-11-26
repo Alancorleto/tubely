@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/base64"
 	"fmt"
 	"io"
 	"net/http"
@@ -50,6 +51,10 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
+	encodedImage := base64.StdEncoding.EncodeToString(imageData)
+
+	dataURL := fmt.Sprintf("data:%s;base64,%s", mediaType, encodedImage)
+
 	video, err := cfg.db.GetVideo(videoID)
 	if err != nil {
 		respondWithError(w, http.StatusNotFound, "Video not found", err)
@@ -61,15 +66,16 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	thumb := thumbnail{
-		data:      imageData,
-		mediaType: mediaType,
-	}
+	// thumb := thumbnail{
+	// 	data:      imageData,
+	// 	mediaType: mediaType,
+	// }
 
-	videoThumbnails[videoID] = thumb
+	// videoThumbnails[videoID] = thumb
 
-	url := fmt.Sprintf("http://localhost:8091/api/thumbnails/%s", videoIDString)
-	video.ThumbnailURL = &url
+	// url := fmt.Sprintf("http://localhost:8091/api/thumbnails/%s", videoIDString)
+	// video.ThumbnailURL = &url
+	video.ThumbnailURL = &dataURL
 	cfg.db.UpdateVideo(video)
 
 	respondWithJSON(w, http.StatusOK, video)
