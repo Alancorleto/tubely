@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -83,7 +82,7 @@ func main() {
 
 	s3Config, err := config.LoadDefaultConfig(context.Background(), config.WithRegion(s3Region))
 	if err != nil {
-		log.Fatal(fmt.Sprintf("Unable to initialize S3 Config: %v", err))
+		log.Fatalf("Unable to initialize S3 Config: %v", err)
 	}
 
 	s3Client := s3.NewFromConfig(s3Config)
