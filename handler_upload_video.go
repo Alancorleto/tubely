@@ -42,11 +42,13 @@ func (cfg *apiConfig) handlerUploadVideo(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
+	// Validate ownership of the video
 	if video.UserID != userID {
 		respondWithError(w, http.StatusUnauthorized, "Unauthorized user", err)
 		return
 	}
 
+	// Check max size
 	err = r.ParseMultipartForm(maxMemory)
 	if err != nil {
 		respondWithError(w, http.StatusBadRequest, "Video size exceeds 1 GB", err)
@@ -73,9 +75,9 @@ func (cfg *apiConfig) handlerUploadVideo(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
+	// Create a temporary file for upload
 	tempFileName := "tubely-upload.mp4"
 	tempPath := ""
-
 	tempFile, err := os.CreateTemp(tempPath, tempFileName)
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, "Unable to create video temp file", err)
@@ -88,20 +90,14 @@ func (cfg *apiConfig) handlerUploadVideo(w http.ResponseWriter, r *http.Request)
 
 	tempFile.Seek(0, io.SeekStart)
 
+	// Get video aspect ratio
 	aspectRatio, err := getVideoAspectRatio(tempFile.Name())
 	if err != nil {
 		respondWithError(w, http.StatusBadRequest, "Unable to get video aspect ratio", err)
 		return
 	}
 
-	randomBytes := make([]byte, 32)
-	_, err = rand.Read(randomBytes)
-	if err != nil {
-		respondWithError(w, http.StatusInternalServerError, "Unable to create a random file name", err)
-		return
-	}
-	randomBytesString := base64.RawURLEncoding.EncodeToString(randomBytes)
-
+	// Assign a key prefix based on aspect ratio
 	keyPrefix := "other"
 	switch aspectRatio {
 	case "16:9":
@@ -110,24 +106,52 @@ func (cfg *apiConfig) handlerUploadVideo(w http.ResponseWriter, r *http.Request)
 		keyPrefix = "portrait"
 	}
 
+	// Optimize video for fast start
+	optimizedVideoFilePath, err := processVideoForFastStart(tempFile.Name())
+	if err != nil {
+		respondWithError(w, 500, "Unable to optimize video for fast start", err)
+		return
+	}
+
+	// Store the optimized video in a file variable
+	optimizedVideoFile, err := os.Open(optimizedVideoFilePath)
+	if err != nil {
+		respondWithError(w, 500, "Unable to open optimized video", err)
+		return
+	}
+
+	// Delete the old temp tile
+	os.Remove(tempFile.Name())
+
+	// Create random name
+	randomBytes := make([]byte, 32)
+	_, err = rand.Read(randomBytes)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Unable to create a random file name", err)
+		return
+	}
+	randomBytesString := base64.RawURLEncoding.EncodeToString(randomBytes)
+
 	fileKey := keyPrefix + "/" + randomBytesString + ".mp4"
 
+	// Upload video to S3
 	putObjectInput := s3.PutObjectInput{
 		Bucket:      &cfg.s3Bucket,
 		Key:         &fileKey,
-		Body:        tempFile,
+		Body:        optimizedVideoFile,
 		ContentType: &mediaType,
 	}
-
 	_, err = cfg.s3Client.PutObject(r.Context(), &putObjectInput)
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, "Unable upload file to S3", err)
 		return
 	}
 
+	// Set video URL
 	videoURL := fmt.Sprintf("https://%s.s3.%s.amazonaws.com/%s", cfg.s3Bucket, cfg.s3Region, fileKey)
 	video.VideoURL = &videoURL
 
+	// Update video to the database
 	err = cfg.db.UpdateVideo(video)
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, "Unable update video to database", err)
